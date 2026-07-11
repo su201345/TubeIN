@@ -3,7 +3,7 @@ FROM python:3.11-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     git \
-    execstack \
+    patchelf \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -13,7 +13,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Some container kernels reject ctranslate2's shared library because it
 # requests an executable stack; clear that flag so it can be mmap'd.
-RUN find / -name "libctranslate2*.so*" -exec execstack -c {} \; 2>/dev/null || true
+# (execstack isn't packaged for Debian trixie anymore; patchelf does the same job.)
+RUN find / -name "libctranslate2*.so*" -exec patchelf --clear-execstack {} \; 2>/dev/null || true
 
 COPY . .
 
