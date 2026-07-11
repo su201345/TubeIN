@@ -40,12 +40,24 @@ def start_in_process_worker():
         return
 
     def _run():
+        import logging
+
         from rq import Worker
 
         from core.job_queue import get_queue, get_redis
 
+        logging.basicConfig(level=logging.INFO)
         worker = Worker([get_queue()], connection=get_redis())
-        worker.work(with_scheduler=False)
+        # RQ installs SIGINT/SIGTERM handlers on bootstrap, which only
+        # Python's main thread is allowed to do; since this worker runs in
+        # a background thread, that raises ValueError and silently kills
+        # the thread (no worker ever consumes the queue). There's no public
+        # flag to skip it, so no-op the installer for this instance.
+        worker._install_signal_handlers = lambda: None
+        try:
+            worker.work(with_scheduler=False)
+        except Exception:
+            logging.getLogger(__name__).exception("RQ worker thread crashed")
 
     thread = threading.Thread(target=_run, name="rq-worker", daemon=True)
     thread.start()
