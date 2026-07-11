@@ -21,10 +21,7 @@ def create_transcript_job(payload: TranscriptRequest) -> JobCreatedResponse:
     queue = get_queue()
     queue.enqueue(
         run_transcript_job,
-        job_id=job_id,
-        url=payload.url,
-        source_language=payload.source_language.value,
-        want_translation=payload.want_translation,
+        args=(job_id, payload.url, payload.source_language.value, payload.want_translation),
         job_timeout=1800,
     )
 

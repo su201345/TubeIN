@@ -18,6 +18,10 @@ def get_model() -> WhisperModel:
     return _model
 
 
+class NoSpeechDetectedError(Exception):
+    """Raised when the audio has no detectable speech (e.g. music-only track)."""
+
+
 def _run(audio_path: str, task: str, language: str | None) -> tuple[list[TranscriptLine], str]:
     model = get_model()
     segments, info = model.transcribe(
@@ -27,10 +31,22 @@ def _run(audio_path: str, task: str, language: str | None) -> tuple[list[Transcr
         vad_filter=True,
         beam_size=5,
     )
-    lines = [
-        TranscriptLine(start=seg.start, end=seg.end, text=seg.text.strip())
-        for seg in segments
-    ]
+    try:
+        lines = [
+            TranscriptLine(start=seg.start, end=seg.end, text=seg.text.strip())
+            for seg in segments
+        ]
+    except ValueError as exc:
+        # faster-whisper's VAD-filtered decoder raises "max() arg is an empty
+        # sequence" (or similar) when it finds zero speech segments in the
+        # whole track (e.g. instrumental/music-only audio).
+        raise NoSpeechDetectedError(
+            "No speech was detected in this video's audio."
+        ) from exc
+
+    if not lines:
+        raise NoSpeechDetectedError("No speech was detected in this video's audio.")
+
     return lines, info.language
 
 

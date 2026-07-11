@@ -4,7 +4,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     git \
     patchelf \
+    curl \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# yt-dlp needs a JS runtime to solve YouTube's player challenge/signature
+# deciphering; Deno is a single static binary and yt-dlp's preferred default.
+RUN curl -fsSL https://deno.land/install.sh | sh -s -- -y \
+    && mv /root/.deno/bin/deno /usr/local/bin/deno
 
 WORKDIR /app
 

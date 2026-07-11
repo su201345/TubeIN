@@ -138,6 +138,8 @@ def run_transcript_job(job_id: str, url: str, source_language: str, want_transla
 
     except downloader.DownloadError as exc:
         _update(job_id, stage=JobStage.error, error=str(exc), message="Download failed")
+    except transcriber.NoSpeechDetectedError as exc:
+        _update(job_id, stage=JobStage.error, error=str(exc), message="No speech detected")
     except Exception as exc:  # noqa: BLE001
         _update(
             job_id,
