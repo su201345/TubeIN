@@ -1,0 +1,47 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        WHISPER_MODEL_SIZE: ${WHISPER_MODEL_SIZE:-medium}
+    ports:
+      - "8000:8000"
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      CORS_ORIGINS: http://localhost:3000
+      WHISPER_MODEL_SIZE: ${WHISPER_MODEL_SIZE:-medium}
+      WHISPER_DEVICE: cpu
+      WHISPER_COMPUTE_TYPE: int8
+      MAX_VIDEO_SECONDS: 1800
+    depends_on:
+      - redis
+
+  worker:
+    build:
+      context: ./backend
+      args:
+        WHISPER_MODEL_SIZE: ${WHISPER_MODEL_SIZE:-medium}
+    command: ["python", "run_worker.py"]
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      WHISPER_MODEL_SIZE: ${WHISPER_MODEL_SIZE:-medium}
+      WHISPER_DEVICE: cpu
+      WHISPER_COMPUTE_TYPE: int8
+      MAX_VIDEO_SECONDS: 1800
+    depends_on:
+      - redis
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+    depends_on:
+      - backend
