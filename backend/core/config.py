@@ -9,13 +9,15 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://localhost:6379/0"
     cors_origins_raw: str = Field("http://localhost:3000", alias="CORS_ORIGINS")
-    whisper_model_size: str = "medium"
+    whisper_model_size: str = "small"
     whisper_device: str = "cpu"
     whisper_compute_type: str = "int8"
     nllb_model_name: str = "facebook/nllb-200-distilled-600M"
     max_video_seconds: int = 1800
     job_result_ttl: int = 86400
     audio_tmp_dir: str = "/tmp/ytt_audio"
+    run_worker_in_process: bool = True
+    enable_nllb_translation: bool = False
 
     @property
     def cors_origins(self) -> list[str]:

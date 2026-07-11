@@ -1,6 +1,9 @@
+from core.config import get_settings
 from core.job_store import save_status
 from models.schemas import JobStage, JobStatus, TranscriptLine
 from services import captions, downloader, transcriber, translator
+
+_settings = get_settings()
 
 
 def _update(job_id: str, **kwargs) -> JobStatus:
@@ -40,32 +43,36 @@ def run_transcript_job(job_id: str, url: str, source_language: str, want_transla
             lines, lang_code = existing
             needs_translation = want_translation and lang_code != "en"
 
-            if needs_translation:
+            # Without NLLB available (e.g. free-tier RAM limits), skip captions
+            # that need translating and fall through to the Whisper path below,
+            # which can transcribe + translate directly from audio.
+            if not needs_translation or _settings.enable_nllb_translation:
+                if needs_translation:
+                    _update(
+                        job_id,
+                        stage=JobStage.translating,
+                        progress=60,
+                        message="Translating existing captions to English…",
+                        detected_language=lang_code,
+                        source="captions",
+                    )
+                    lines = translator.translate_lines(lines, lang_code)
+                else:
+                    lines = [
+                        TranscriptLine(start=l.start, end=l.end, text=l.text, text_en=l.text if lang_code == "en" else None)
+                        for l in lines
+                    ]
+
                 _update(
                     job_id,
-                    stage=JobStage.translating,
-                    progress=60,
-                    message="Translating existing captions to English…",
+                    stage=JobStage.done,
+                    progress=100,
+                    message="Done",
                     detected_language=lang_code,
                     source="captions",
+                    lines=lines,
                 )
-                lines = translator.translate_lines(lines, lang_code)
-            else:
-                lines = [
-                    TranscriptLine(start=l.start, end=l.end, text=l.text, text_en=l.text if lang_code == "en" else None)
-                    for l in lines
-                ]
-
-            _update(
-                job_id,
-                stage=JobStage.done,
-                progress=100,
-                message="Done",
-                detected_language=lang_code,
-                source="captions",
-                lines=lines,
-            )
-            return
+                return
 
         # No usable captions — fall back to audio download + Whisper.
         _update(

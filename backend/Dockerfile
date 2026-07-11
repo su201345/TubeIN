@@ -19,15 +19,18 @@ RUN find / -name "libctranslate2*.so*" -exec patchelf --clear-execstack {} \; 2>
 COPY . .
 
 # Bake the faster-whisper model into the image so it isn't re-downloaded on every cold start.
-ARG WHISPER_MODEL_SIZE=medium
+ARG WHISPER_MODEL_SIZE=small
 ENV WHISPER_MODEL_SIZE=${WHISPER_MODEL_SIZE}
 RUN python -c "from faster_whisper import WhisperModel; WhisperModel('${WHISPER_MODEL_SIZE}', device='cpu', compute_type='int8')"
 
-# Pre-download NLLB-200 as well so the first text-translation request isn't slow.
-RUN python -c "from transformers import AutoModelForSeq2SeqLM, AutoTokenizer; \
-    m='facebook/nllb-200-distilled-600M'; \
-    AutoTokenizer.from_pretrained(m); \
-    AutoModelForSeq2SeqLM.from_pretrained(m)"
+# NLLB-200 (~2.4GB) is NOT pre-downloaded: ENABLE_NLLB_TRANSLATION defaults to
+# false to fit free-tier RAM limits (Whisper's translate task covers the same
+# need without a second large model in memory). Set the env var to true and
+# uncomment below if deploying somewhere with more RAM.
+# RUN python -c "from transformers import AutoModelForSeq2SeqLM, AutoTokenizer; \
+#     m='facebook/nllb-200-distilled-600M'; \
+#     AutoTokenizer.from_pretrained(m); \
+#     AutoModelForSeq2SeqLM.from_pretrained(m)"
 
 EXPOSE 8000
 

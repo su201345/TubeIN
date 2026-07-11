@@ -18,6 +18,10 @@ services:
       WHISPER_DEVICE: cpu
       WHISPER_COMPUTE_TYPE: int8
       MAX_VIDEO_SECONDS: 1800
+      # A dedicated `worker` container handles jobs locally, so the web
+      # process doesn't also need to run one (unlike the single-instance
+      # free-tier deployment).
+      RUN_WORKER_IN_PROCESS: "false"
     depends_on:
       - redis
 
