@@ -22,7 +22,7 @@ def create_transcript_job(payload: TranscriptRequest) -> JobCreatedResponse:
     queue.enqueue(
         run_transcript_job,
         args=(job_id, payload.url, payload.source_language.value, payload.want_translation),
-        job_timeout=1800,
+        job_timeout=10800,
     )
 
     return JobCreatedResponse(id=job_id)
