@@ -1,4 +1,5 @@
 import os
+import time
 import uuid
 
 import yt_dlp
@@ -7,9 +8,23 @@ from core.config import get_settings
 
 _settings = get_settings()
 
+# Player clients that don't require a PO token, ordered by how reliably they
+# work from datacenter/hosting IPs (which YouTube is more likely to flag with
+# "Sign in to confirm you're not a bot" on the default web client).
+# android_vr and tv are JS-player-free and PO-token-free; web_safari is kept
+# as a last resort since it's yt-dlp's other current default.
+_PLAYER_CLIENT_ATTEMPTS = ["android_vr", "tv", "web_safari"]
+
+_BOT_CHECK_MARKERS = ("sign in to confirm you're not a bot", "confirm you're not a bot")
+
 
 class DownloadError(Exception):
     pass
+
+
+def _is_bot_check_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(marker in message for marker in _BOT_CHECK_MARKERS)
 
 
 def download_audio(url: str) -> tuple[str, dict]:
@@ -18,7 +33,7 @@ def download_audio(url: str) -> tuple[str, dict]:
     out_id = uuid.uuid4().hex
     out_template = os.path.join(_settings.audio_tmp_dir, f"{out_id}.%(ext)s")
 
-    ydl_opts = {
+    base_opts = {
         "format": "bestaudio/best",
         "outtmpl": out_template,
         "postprocessors": [
@@ -34,11 +49,39 @@ def download_audio(url: str) -> tuple[str, dict]:
         "socket_timeout": 30,
     }
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-    except yt_dlp.utils.DownloadError as exc:
-        raise DownloadError(str(exc)) from exc
+    last_exc: Exception | None = None
+    info = None
+    for attempt, client in enumerate(_PLAYER_CLIENT_ATTEMPTS):
+        ydl_opts = {
+            **base_opts,
+            "extractor_args": {"youtube": {"player_client": [client]}},
+        }
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+            last_exc = None
+            break
+        except yt_dlp.utils.DownloadError as exc:
+            last_exc = exc
+            # Only worth retrying with another client if this looks like the
+            # bot-check / IP-reputation failure; other errors (private video,
+            # age-restricted, etc.) won't be fixed by switching clients.
+            if not _is_bot_check_error(exc):
+                break
+            if attempt < len(_PLAYER_CLIENT_ATTEMPTS) - 1:
+                time.sleep(1.5 * (attempt + 1))
+            continue
+
+    if last_exc is not None:
+        if _is_bot_check_error(last_exc):
+            raise DownloadError(
+                "YouTube is blocking downloads from this server's IP address "
+                "('Sign in to confirm you're not a bot'). This video has no "
+                "existing captions to fall back on, so a transcript can't be "
+                "produced right now. Try again later or use a video that "
+                "already has captions."
+            ) from last_exc
+        raise DownloadError(str(last_exc)) from last_exc
 
     duration = info.get("duration") or 0
     if _settings.max_video_seconds and duration > _settings.max_video_seconds:
