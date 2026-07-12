@@ -8,12 +8,12 @@ from core.config import get_settings
 
 _settings = get_settings()
 
-# Player clients that don't require a PO token, ordered by how reliably they
-# work from datacenter/hosting IPs (which YouTube is more likely to flag with
-# "Sign in to confirm you're not a bot" on the default web client).
-# android_vr and tv are JS-player-free and PO-token-free; web_safari is kept
-# as a last resort since it's yt-dlp's other current default.
-_PLAYER_CLIENT_ATTEMPTS = ["android_vr", "tv", "web_safari"]
+# Player clients that work without a PO token or JS runtime, in the order
+# most likely to succeed. Verified directly (yt-dlp 2026.7.4): "tv",
+# "web_safari", "mweb", "tv_simply", and "web_embedded" all require a PO
+# token and fail immediately without one, so they're not worth attempting --
+# only android_vr, android, and ios are genuinely PO-token-free.
+_PLAYER_CLIENT_ATTEMPTS = ["android_vr", "android", "ios"]
 
 _BOT_CHECK_MARKERS = ("sign in to confirm you're not a bot", "confirm you're not a bot")
 
@@ -47,6 +47,10 @@ def download_audio(url: str) -> tuple[str, dict]:
         "quiet": True,
         "no_warnings": True,
         "socket_timeout": 30,
+        # A small delay before the request can help avoid rate-based bot
+        # flagging on top of the static IP-reputation check (which this
+        # can't fix, but costs nothing to also guard against).
+        "sleep_interval_requests": 1,
     }
 
     last_exc: Exception | None = None
